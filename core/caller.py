@@ -89,7 +89,7 @@ def compute_likelihood(clust, RDR, BAF, scale, n_wgd, S, pairs, covs):
 
 
 
-def get_cluster_CNs(cellnames, normal_cells, clust, RDR, BAF, means, covs, max_wgd, maxCN_user, ploidy_RDR):
+def get_cluster_CNs(cellnames, clust, RDR, BAF, means, covs, max_wgd, maxCN_user, ploidy_RDR):
     cell_clust = dict(zip(cellnames, np.split(clust, len(cellnames))))
     best_CNs = {}
     chosen = {}

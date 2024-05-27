@@ -2,6 +2,8 @@ import os
 import subprocess
 import numpy as np
 import pandas as pd
+import multiprocessing
+from itertools import repeat
 from pyfaidx import Fasta
 import pysam
 from collections import defaultdict
@@ -9,15 +11,11 @@ from collections import defaultdict
 from helpers import flatten
 
 # Get chromosome lengths from a reference genome.
-def get_chrom_lens(ref_path, include_allosomes = False):
+def get_chrom_lens(ref_path, chrom_names):
     ref = Fasta(ref_path)
     chrom_lens = {}
-    for chrom in ref.keys():
-        if include_allosomes:
-            chrom_lens[chrom] = len(ref[chrom])
-        else:
-            if 'X' not in chrom and 'Y' not in chrom:
-                chrom_lens[chrom] = len(ref[chrom])
+    for chrom in chrom_names:
+        chrom_lens[chrom] = len(ref[chrom])
     return chrom_lens
 
 # Returns list of tuples containing regions
@@ -34,11 +32,15 @@ def get_bins_from_chromlens(chrom_lens, bin_size):
     return regions
 
 # Creates bed file containing chrom, start, and end indices of regions from regions list
-def write_region_file(out_dir, file_name, regions):
+def write_region_file(out_dir, file_name, regions, stats=None):
     file_path = os.path.join(out_dir, file_name)
     with open(file_path, 'w+') as f:
         for r in regions:
-            f.write(f'{r[0]}\t{r[1]}\t{r[2]}\n')
+            if stats:
+                g,m = stats[(r[0], r[1])]
+                f.write(f'{r[0]}\t{r[1]}\t{r[2]}\t{g}\t{m}\n')
+            else:
+                f.write(f'{r[0]}\t{r[1]}\t{r[2]}\n')
     return file_path
 
 # Read regions from a bed file and returns them as a list of tuples
@@ -50,6 +52,16 @@ def read_region_file(region_path):
             chrom, start, end = info[0], info[1], info[2]
             regions.append((chrom, start, end))
     return regions
+
+def read_stats(region_path):
+    gc, mapp = [], []
+    with open(region_path) as f:
+        for line in f:
+            info = line.strip().split('\t')
+            g,m = float(info[3]), float(info[4])
+            gc.append(g)
+            mapp.append(m)
+    return gc, mapp
 
 # Writes cell names to file
 def write_cell_names(path, cell_names):
@@ -64,6 +76,15 @@ def read_cell_names(path):
         for line in f:
             cell_names.append(line.strip())
     return cell_names
+
+def get_chrom_names(inp):
+    if inp is None:
+        chrom_names = [f'chr{i}' for i in range(1, 23)]
+    else:
+        with open(inp) as f:
+            chrom_names = [line.strip() for line in f]
+    return chrom_names
+
         
 def get_readcounts_bed(bed_path, bin_ids):
     f = open(bed_path)
@@ -78,54 +99,30 @@ def get_readcounts_bed(bed_path, bin_ids):
     return counts
 
 ## Unfinished
-def get_readcounts_bamfile(bam_path, region_path, barcodes):
-    regions = read_region_file(region_path)
-    n = len(regions)
-
-    f = pysam.AlignmentFile(os.path.join(bam_path), 'rb')
-
-    contig_names = [x[0] for x in f.get_index_statistics()]
-    chrom = regions[0][0]
-    asIs = True
-    if chrom not in contig_names and chrom[3:] in contig_names:
-        asIs = False
-
-    #counts = defaultdict(lambda: [0 for i in range(n)])
-    counts = {cell: [0 for i in range(n)] for cell in barcodes}
-    for i,r in enumerate(regions):
-        chrom = r[0]
-        if not asIs:
-            chrom = chrom[3:]
-        reads = f.fetch(chrom, int(r[1]), int(r[2]))
-        for read in reads:
-            for t in read.tags:
-                if t[0] == 'CB':
-                    cell = t[1]
-                    if cell in barcodes:
-                        #if '-' in cell:
-                        #    cell = cell[:cell.index('-')]
-                        counts[cell][i] += 1
-    
-    #cell_ids = list(counts.keys())
-
-    readcounts_df = pd.DataFrame.from_dict(counts, orient='index')
-    readcounts_df.index.name = 'cell'
-    return readcounts_df, barcodes
-
-def get_readcounts_bamdir(bam_dir, region_path, cell_ids = False):
-    bam_paths = [fname for fname in os.listdir(bam_dir) if os.path.isfile(os.path.join(bam_dir, fname)) and fname[-4:] == '.bam']
-    regions = read_region_file(region_path)
-    if cell_ids:
-        pass
+def get_readcounts_bamfile(bam_path, regions_inp):
+    if isinstance(regions_inp, str):
+        regions = read_region_file(region_inp)
     else:
-        cell_ids = [name[:-4] for name in bam_paths]
+        regions = regions_inp
+    f = pysam.AlignmentFile(bam_path, 'rb')
+    counts = [f.count(region=f'{r[0]}:{r[1]}-{r[2]}') for r in regions]
+    return np.array(counts)
 
-    counts = []
-    for bam_file in bam_paths:
-        f = pysam.AlignmentFile(os.path.join(bam_dir, bam_file), 'rb')
-        cur_counts = [f.count(region=f'{r[0]}:{r[1]}-{r[2]}') for r in regions]
-        counts.append(cur_counts)
-        f.close()
+def get_readcounts_bamdir(bam_dir, regions, num_processors=1):
+    bam_paths = [fname for fname in os.listdir(bam_dir) if os.path.isfile(os.path.join(bam_dir, fname)) and fname[-4:] == '.bam']
+    full_bam_paths = [os.path.join(bam_dir, bam_file) for bam_file in bam_paths]
+    cell_ids = [name[:-4] for name in bam_paths]
+
+    if num_processors > 1:
+        with multiprocessing.Pool(processes=num_processors) as pool:
+            counts = pool.starmap(get_readcounts_bamfile, zip(full_bam_paths, repeat(regions)))
+    else:
+        counts = []
+        for bam_file in bam_paths:
+            f = pysam.AlignmentFile(os.path.join(bam_dir, bam_file), 'rb')
+            cur_counts = [f.count(region=f'{r[0]}:{r[1]}-{r[2]}') for r in regions]
+            counts.append(cur_counts)
+            f.close()
 
     readcounts_df = pd.DataFrame(counts, index=cell_ids)
     readcounts_df.index.name = 'cell'
@@ -172,49 +169,33 @@ def read_map(map_path, bin_ids):
 # Filters regions based on gc and mapp
 def filter_bins_gc_mapp(regions, gc, mapp, min_gc = 0.2, max_gc = 0.8, min_mapp = 0.9):
     filtered_regions = []
+    filtered_stats = {}
     for i,region in enumerate(regions):
         if gc[i] > min_gc and gc[i] < max_gc and mapp[i] > min_mapp:
             filtered_regions.append(region)
-    return filtered_regions
+            filtered_stats[(region[0], region[1])] = (gc[i], mapp[i])
+    return filtered_regions, filtered_stats
 
-# Intended for barcodes.info.tsv
-def get_chisel_barcodes(filepath):
+def get_chisel_barcodes(filepath, inverse=False):
     df = pd.read_csv(filepath, sep='\t')
-    df = df.drop(['REPETITION', 'FILE'], axis=1)
+    df = df.drop(['REPETITION', 'FILE'], axis=1, errors='ignore')
     df['#CELL'] = df['#CELL'].apply(lambda x: x[:-4])
     df = df.set_index('BARCODE')
     df = df.to_dict()['#CELL']
+    if inverse:
+        df = {v: k for k, v in df.items()}
     return df
 
-# Read existing BAF file from chisel, intended for combo.tsv
-def collect_chisel_BAF(filepath, full_cell_names, cellmap = None):
-    df = pd.read_csv(filepath, sep='\t', names=['chrom', 'start', 'end', 'barcode', 'normcount', 'readcount', 'RDR', 'Acount', 'Bcount', 'BAF'])
-    df = df.drop(['normcount', 'readcount', 'RDR', 'Acount', 'Bcount'], axis=1)
-    df = df.set_index(['barcode', 'chrom', 'start', 'end'])
-
-    if cellmap:
-        df = df.rename(index=cellmap)
-    df.index.names = ['cell', 'chrom', 'start', 'end']
-
-    chis_cell_names = list(df.index.get_level_values(0).drop_duplicates())
-    cell_df = df.xs(chis_cell_names[0])
-    regions = [(x[0], x[1]+1, x[2]) for x in cell_df.index]
-    df = df.droplevel('end')
-    df['BAF'] = df['BAF'].apply(lambda x: min(x, 1-x))
-    cell_names = [c for c in full_cell_names if c in chis_cell_names]
-    df = flatten(df, cell_names)
-    return df, regions
-
 def collect_other_BAF(filepath, full_cell_names):
-    df = pd.read_csv(filepath, sep='\t', names=['chrom', 'start', 'end', 'cell', 'BAF'])
+    df = pd.read_csv(filepath, sep='\t')
     df = df.set_index(['cell', 'chrom', 'start', 'end'])
 
-    chis_cell_names = list(df.index.get_level_values(0).drop_duplicates())
-    cell_df = df.xs(chis_cell_names[0])
+    alt_cell_names = list(df.index.get_level_values(0).drop_duplicates())
+    cell_df = df.xs(alt_cell_names[0])
     regions = [(x[0], x[1]+1, x[2]) for x in cell_df.index]
     df = df.droplevel('end')
     df['BAF'] = df['BAF'].apply(lambda x: min(x, 1-x))
-    cell_names = [c for c in full_cell_names if c in chis_cell_names]
+    cell_names = [c for c in full_cell_names if c in alt_cell_names]
     df = flatten(df, cell_names)
     return df, regions
 
@@ -223,6 +204,7 @@ def read_data_flat(path):
     df = pd.read_csv(path, delimiter='\t', index_col=0)
     df.columns = df.columns.map(int)
     return df
+
 
 # Read readcounts or bafs from file in complete format
 def read_data_full(path):

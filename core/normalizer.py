@@ -6,49 +6,56 @@ from scipy.signal import find_peaks
 import os
 
 # Assume we have already removed bad bins and reformated data to be a list CNP for each cell. Normalizes read counts based on mappability.
-def map_correct(readcount_df, map_scores):
+def map_correct(readcount_df, mapp):
     good_bins = list(readcount_df.columns)
     for b in good_bins:
-        readcount_df[b] = readcount_df[b] / map_scores[b][0]
+        readcount_df[b] = readcount_df[b] / mapp[b]
     return readcount_df
 
 # Normalizes read counts based on GC content bias.
-def GC_correct(readcount_df, map_scores, cell_names):
+def GC_correct(readcount_df, gc):
     # Arrange bins by GC content
-    num_intervals = 10 if len(map_scores) < 1000 else 1
-    GC_percentiles = np.percentile([k[2] for k in map_scores], range(0, 100 + num_intervals, num_intervals))
+    GC_percentiles = np.percentile(gc, range(0, 105, 5))
     GC_bins = [[] for i in range(len(GC_percentiles)-1)]
-    for i in range(len(map_scores)):
-        for j in range(0, num_intervals):
-            if map_scores[i][2] >= GC_percentiles[j] and map_scores[i][2] <= GC_percentiles[j+1]:
+    for i in range(len(gc)):
+        for j in range(len(GC_percentiles)-1):
+            if gc[i] >= GC_percentiles[j] and gc[i] < GC_percentiles[j+1]:
                 GC_bins[j].append(i)
                 break
+            elif gc[i] == GC_percentiles[-1]:
+                GC_bins[-1].append(i)
 
     # Correct for each cell independently
-    for cell in cell_names:
-        cell_row = readcount_df.loc[cell]
-        avg_map = np.average(cell_row)
-        GC_bin_avg = {}
-        for group in GC_bins:
-            group_avg_rc = sum(cell_row[k] for k in group) / len(group)
-            for k in group:
-                GC_bin_avg[k] = group_avg_rc
+    temp_dfs = []
+    for group in GC_bins:
+        mean_vals = readcount_df[group].mean(axis=1)
+        temp_df = pd.DataFrame({j: mean_vals for j in group}, index=readcount_df.index)
+        temp_dfs.append(temp_df)
         
-        readcount_df.loc[cell] *= avg_map
-        for b in range(len(readcount_df.columns)):
-            readcount_df[b].loc[cell] = readcount_df[b].loc[cell] / GC_bin_avg[b]
+    GC_bin_avg = pd.concat(temp_dfs, axis=1)
+    GC_bin_avg = GC_bin_avg.sort_index(axis=1)
+    cell_means = readcount_df.mean(axis=1)
+    readcount_df = readcount_df.mul(cell_means, axis=0)
+    readcount_df = readcount_df.div(GC_bin_avg)
             
     return readcount_df
 
 # Normalizes based on reads accumulated from normal cells
 def normcell_correct(readcount_df, normal_cells):
     norm_rc = readcount_df.filter(items=normal_cells, axis=0)
+    norm_means = norm_rc.apply(np.mean, axis=1)
     # First divide by bin-lambda
-    bin_lambdas = {}
     for b in range(len(readcount_df.columns)):
-        norm_bin_vals = norm_rc[b] / norm_rc.apply(np.mean, axis=1)
-        bin_lambda = np.sum(norm_bin_vals) / len(norm_bin_vals)
+        norm_bin_vals = norm_rc[b] / norm_means
+        bin_lambda = np.mean(norm_bin_vals)
         readcount_df[b] = readcount_df[b] / bin_lambda
+    return readcount_df
+
+def bulknorm_correct(readcount_df, norm_counts):
+    norm_mean = np.mean(norm_counts)
+    bin_lambdas = norm_counts / norm_mean
+    for b in range(len(readcount_df.columns)):
+        readcount_df[b] = readcount_df[b] / y[b]
     return readcount_df
 
 # Given array of read counts, computes gini coefficient
@@ -129,12 +136,7 @@ def get_normal_from_gini_auto(gini, num_boxes = None, min_count = 10, max_gini =
 
     return normal_cells
 
-def make_pseudonormal(bam_dir, out_dir):
-    normal_cells = []
-    with open(os.path.join(out_dir, 'diploid.txt')) as f:
-        for line in f:
-            normal_cells.append(line.strip())
-
+def make_pseudonormal(bam_dir, out_dir, normal_cells):
     temp_paths = os.path.join(out_dir, 'norm_paths.txt')
     with open(temp_paths, 'w+') as f:
         for cell in normal_cells:

@@ -19,7 +19,7 @@ def read_data_full(path):
 # Assumes data has been processed with read_data from complete_format
 def flatten(df, cell_names):
     chrom_names = list(df.index.get_level_values(1).drop_duplicates())
-    chrom_names.sort(key = lambda x: int(x[3:]))
+    #chrom_names.sort(key = lambda x: int(x[3:]))
     flat_data = {}
     for cell in cell_names:
         cell_df = df.xs(cell, level='cell')
@@ -244,48 +244,6 @@ def get_coords_seCNV(location_path):
             coords[chrom].append(start)
     return coords
 
-# Drops ids if missing from one of them
-def correct_RC_BAF_complete(RC_df, BAF_df, loc_coords = None):
-    cell_names_1, cell_names_2 = set(RC_df.index.get_level_values(0).drop_duplicates()), set(BAF_df.index.get_level_values(0).drop_duplicates())
-    cell_names = list(cell_names_1.intersection(cell_names_2))
-    RC_df = RC_df[RC_df.index.isin(cell_names, level='cell')]
-    BAF_df = BAF_df[BAF_df.index.isin(cell_names, level='cell')]
-    coords_1, coords_2 = get_coords(RC_df), get_coords(BAF_df)
-    chrom_names_1, chrom_names_2 = list(coords_1.keys()), list(coords_2.keys())
-
-    if loc_coords:
-        coords_0 = loc_coords
-        chrom_names_0 = list(coords_0.keys())
-
-        chrom_names = list(set(chrom_names_0) & set(chrom_names_1) & set(chrom_names_2))
-        keep = {}
-        for chrom in chrom_names:
-            keep[chrom] = list(set(coords_0[chrom]) & set(coords_1[chrom]) & set(coords_2[chrom]))
-    
-    else:
-        chrom_names = list(set(chrom_names_1) & set(chrom_names_2))
-        keep = {}
-        for chrom in chrom_names:
-            keep[chrom] = list(set(coords_1[chrom]) & set(coords_2[chrom]))
-    
-    RC_df = RC_df[RC_df.index.isin(chrom_names, level='chrom')]
-    BAF_df = BAF_df[BAF_df.index.isin(chrom_names, level='chrom')]
-    
-    RC_df_filt = pd.DataFrame()
-    grouped = RC_df.groupby('chrom')
-    for chrom, group in grouped:
-        mask = group.index.get_level_values('start').isin(keep[chrom])
-        RC_df_filt = pd.concat([RC_df_filt, group[mask]])
-    
-    BAF_df_filt = pd.DataFrame()
-    grouped = BAF_df.groupby('chrom')
-    for chrom, group in grouped:
-        mask = group.index.get_level_values('start').isin(keep[chrom])
-        BAF_df_filt = pd.concat([BAF_df_filt, group[mask]])
- 
-    return RC_df_filt, BAF_df_filt
-
-
 
 def correct_RC_BAF(RC_df, BAF_df, bins1, bins2, normal_cells=[]):
     cell_names1, cell_names2 = list(RC_df.index), list(BAF_df.index)
@@ -310,6 +268,37 @@ def correct_RC_BAF(RC_df, BAF_df, bins1, bins2, normal_cells=[]):
 
     return RC_df_filt, BAF_df_filt, shared, cell_names
 
+def check_prep_readcount(args):
+    if args['reference'] is None:
+        print('Must provide a reference.')
+        return -1
+    if not os.path.exists(args['reference']):
+        print('Cannot find reference file')
+        return -1
+    if args['bin_size'] is None:
+        print('Bin size required')
+        return -1
+    if not os.path.exists(args['map_file']):
+        print('Must provide bigWig mappability file.')
+        return -1
+    if not os.path.isdir(args['bam_path']):
+        print('Must specify path to directory containing bam files.')
+        return -1
+    return 0
 
-
-
+def check_prep_baf(args):
+    if not os.path.isdir(args['bam_path']):
+        print('Must specify path to directory containing bam files.')
+        return -1
+    if args['precomputed_baf']:
+        if not os.path.exists(args['precomputed_baf']):
+            print('Cannot find input baf file.')
+            return -1
+    elif args['vcf']:
+        if not os.path.exists(args['vcf']):
+            print('Cannot find input vcf file.')
+            return -1
+    else:
+        print('Must provide input vcf with phased snps or precomputed BAFs.')
+        return -1
+    return 0
