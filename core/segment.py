@@ -5,8 +5,8 @@ import pandas as pd
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
 
-from helpers import *
-from local import local_segmentation_generator
+from core.helpers import *
+from core.local import local_segmentation_generator
     
 def euc(a, b):
     t = a - b

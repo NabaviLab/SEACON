@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import numpy as np
 import pandas as pd
 import os
@@ -6,12 +8,12 @@ import argparse
 import datetime
 import pickle
 
-import reader
-import normalizer as norm
-from helpers import *
-from segment import *
-from caller import *
-from baf import chisel_baf_helper, convert_baf, call_chisel_combo, call_chisel_caller
+import core.reader as reader
+import core.normalizer as norm as norm
+from core.helpers import *
+from core.segment import *
+from core.caller import *
+from core.baf import chisel_baf_helper, convert_baf, call_chisel_combo, call_chisel_caller
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -251,7 +253,8 @@ def call(args):
     df = pd.concat(frames)
     df.to_csv(os.path.join(args['out_dir'], f'calls.tsv'), sep='\t', index=False)
 
-def main(args):
+def main():
+    args = parse_args()
     save_args(args)
     if args['mode'] == 'prep_readcount' or args['mode'] == 'full':
         if check_prep_readcount(args) == 0:
@@ -268,5 +271,4 @@ def main(args):
         call(args)
 
 if __name__ == '__main__':
-    args = parse_args()
-    main(args)
+    main()

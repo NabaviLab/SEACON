@@ -9,8 +9,8 @@ import pysam
 import vcf
 import pickle
 
-import reader
-from helpers import index_bins
+import core.reader as reader
+from core.helpers import index_bins
 
 def create_barcodes(cell_names, temp_chis_dir):
     characters = ['A', 'T', 'C', 'G']
