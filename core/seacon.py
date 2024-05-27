@@ -9,7 +9,7 @@ import datetime
 import pickle
 
 import core.reader as reader
-import core.normalizer as norm as norm
+import core.normalizer as norm
 from core.helpers import *
 from core.segment import *
 from core.caller import *
