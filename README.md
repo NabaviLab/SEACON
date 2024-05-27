@@ -37,7 +37,7 @@ Next, follow either the instructions for either the standard installation or cus
 ### Standard Installation
 To reproduce the environment needed to use SEACON, with all its dependencies and versions, create a new conda environment from the provided **environment.yml** file:
 ```
-conda env create -f ${SOURCEDIR}/environment.yml
+conda env create -f environment.yml
 ```
 
 This will create a new conda environment named SEACON. Next, execute the installation:
