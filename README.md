@@ -68,6 +68,7 @@ The following R packages are also required:
 
 Additionally, SEACON requires the following bioinformatics tools be available:
 * [bedtools](https://bedtools.readthedocs.io/en/latest/)
+* [bcftools](https://samtools.github.io/bcftools/bcftools.html)
 * [bigWigAverageOverBed](https://www.encodeproject.org/software/bigwigaverageoverbed/)
 These tools must be added to your `PATH` variable.
 

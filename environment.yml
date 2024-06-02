@@ -10,6 +10,7 @@ dependencies:
   - alsa-lib=1.2.3.2=h166bdaf_0
   - attr=2.5.1=h166bdaf_1
   - bcftools=1.16=hfe4b78e_1
+  - bedtools=2.31.1=hf5e1c6e_1
   - binutils_impl_linux-64=2.39=he00db2b_1
   - binutils_linux-64=2.39=h5fc0e48_13
   - biopython=1.81=py310h1fa729e_0
@@ -208,3 +209,5 @@ dependencies:
   - zipp=3.17.0=pyhd8ed1ab_0
   - zlib=1.2.13=hd590300_5
   - zstd=1.5.5=hfc55251_0
+  - pip:
+      - seacon==1.1.0
