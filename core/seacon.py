@@ -169,7 +169,7 @@ def prep_baf(args):
                 print('Cannot find chisel submodule.')
                 return
 
-        #chisel_baf_helper(cell_names, chrom_names, bin_coords, norm_counts, readcounts_df, RDR_df, args['bam_path'], args['vcf'], args['out_dir'], temp_chis_dir, args['num_processors'])
+        chisel_baf_helper(cell_names, chrom_names, bin_coords, norm_counts, readcounts_df, RDR_df, args['bam_path'], args['vcf'], args['out_dir'], temp_chis_dir, args['num_processors'])
         call_chisel_combo(chisel_src, temp_chis_dir, args['block_size'], args['num_processors'])
         call_chisel_caller(chisel_src, temp_chis_dir, args['max_CN'], args['num_processors'])
         convert_baf(args['out_dir'], temp_chis_dir, cell_names, bin_coords)
