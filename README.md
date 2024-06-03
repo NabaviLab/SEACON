@@ -43,7 +43,7 @@ conda env create -f environment.yml
 
 This will create a new conda environment named SEACON. Next, execute the installation:
 ```
-python setup.py install
+pip install .
 ```
 
 Lastly, be sure to activate the environment before using the tool:
