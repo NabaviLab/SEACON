@@ -7,7 +7,7 @@ find_in_conda_env(){
 SOURCEDIR=$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )
 
 X=${SOURCEDIR}/chisel/src/chisel
-conda env config vars set CHISEDIR=$X -n SEACON
+conda env config vars set CHIS_SRC=$X -n SEACON
 
 # Create helper chisel environment
 help_env_name=SEACON_chisel

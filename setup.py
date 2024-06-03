@@ -11,7 +11,7 @@ class CustomInstallCommand(install):
         subprocess.run(['./initialize.sh'])
 
 setup(
-    name='SEACON',
+    name='seacon',
     version='1.1.0',
     author='Samson Weiner',
     author_email='samson.weiner@uconn.edu',
@@ -27,7 +27,7 @@ setup(
     packages=find_packages(),
     entry_points={
         'console_scripts': [
-            'seacon=core.seacon:main',
+            'seacon=seacon.core:main',
         ],
     },
     cmdclass={

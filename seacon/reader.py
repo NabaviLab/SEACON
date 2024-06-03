@@ -8,7 +8,7 @@ from pyfaidx import Fasta
 import pysam
 from collections import defaultdict
 
-from core.helpers import flatten
+from seacon.helpers import flatten
 
 # Get chromosome lengths from a reference genome.
 def get_chrom_lens(ref_path, chrom_names):

@@ -8,12 +8,13 @@ import argparse
 import datetime
 import pickle
 
-import core.reader as reader
-import core.normalizer as norm
-from core.helpers import *
-from core.segment import *
-from core.caller import *
-from core.baf import chisel_baf_helper, convert_baf, call_chisel_combo, call_chisel_caller
+import seacon.reader as reader
+import seacon.normalizer as norm
+from seacon.helpers import index_bins, correct_RC_BAF, combine_flat_data, get_bins_per_chrom
+from seacon.segment import segmentation
+from seacon.caller import get_segs, get_cluster_CNs, allele_caller
+from seacon.baf import chisel_baf_helper, convert_baf, call_chisel_combo, call_chisel_caller
+from seacon.utilities import check_prep_readcount, check_prep_baf
 
 def parse_args():
     parser = argparse.ArgumentParser()

@@ -20,6 +20,7 @@ Under Review.
     - [BAF Prep](#prep_baf-mode)
     - [CNA calling](#call-mode)
     - [Constructing pseudonormal](#pseudonormal-mode)
+    - [Output files](#output-files)
 - [Utilities](#utilities)
     - [Raw Data Preprocessing](#raw-data-preprocessing)
     - [Obtaining Phased SNPs](#obtaining-phased-snps)
@@ -62,6 +63,7 @@ SEACON requires the following python packages are installed:
 * [rpy2](https://rpy2.github.io/)
 * [Pysam](https://pysam.readthedocs.io/en/latest/api.html)
 * [Pyfaidx](https://github.com/mdshw5/pyfaidx)
+* [PyVCF](https://pyvcf.readthedocs.io/en/latest/)
 
 The following R packages are also required:
 * [dnacopy](https://bioconductor.org/packages/release/bioc/html/DNAcopy.html)
@@ -128,6 +130,20 @@ If no matched-normal sample is available, SEACON can construct a pseudonormal sa
 seacon pseudonormal -i bam_dir -o out_dir
 ```
 After this file is generated, use the provided `gen_vcf.sh` script in the *scripts* directory to identify the phased SNPs (see the section [Obtaining phased SNPs](#obtaining-phased-snps)). When this is complete, continue by running SEACON with the *prep_baf* mode.
+
+### output files
+After running the full SEACON pipeline, the final allele-specific copy number profiles are saved in the *calls.tsv* file, which has the following format:
+
+cell &nbsp; chrom &nbsp; start &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; end &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CN <br>
+cell1 &nbsp; chr1	&nbsp;&nbsp;&nbsp; 1000001 &nbsp; 2000000 &nbsp;&nbsp;&nbsp; 1,1 <br>
+cell1 &nbsp; chr1	&nbsp;&nbsp;&nbsp; 2000001 &nbsp; 3000000 &nbsp;&nbsp;&nbsp; 1,2 <br>
+cell1 &nbsp; chr1	&nbsp;&nbsp;&nbsp; 3000001 &nbsp; 4000000 &nbsp;&nbsp;&nbsp; 2,3
+
+The copy number profiles are also saved more compactly in the *calls_flat.tsv* file. Here, each row contains the cell name followed by its copy numbers across the genome. The *ith* column corresponds to the genomic bin specified by the *ith* line in the *filtered_regions.bed* file.
+
+The readcounts, RDRs, and BAFs are saved in files *readcounts.tsv*, *RDR.tsv*, and *BAF.tsv*, respectively, also in compact format. Additionally, the set of normal cells identified in the sample are saved in the *diploid.txt* file.
+
+If the BAF estimation procedure of CHISEL is used, the output of chisel can be found in file *chisel_out/calls/calls.tsv*. Please see the CHISEL documentation for more details.
 
 ## Utilities
 

@@ -2,20 +2,6 @@ import numpy as np
 import pandas as pd
 import os
 
-# Read readcounts from file in simple format (header is 'cell' + 0...n, where n is number of bins, 1 row for each cell)
-def read_data_flat(path):
-    df = pd.read_csv(path, delimiter='\t', index_col=0)
-    df.columns = df.columns.map(int)
-    return df
-
-
-# Read readcounts or bafs from file in complete format
-def read_data_full(path):
-    df = pd.read_csv(path, delimiter='\t')
-    df = df.drop(['end'], axis=1)
-    df = df.set_index(['cell', 'chrom', 'start'])
-    return df
-
 # Assumes data has been processed with read_data from complete_format
 def flatten(df, cell_names):
     chrom_names = list(df.index.get_level_values(1).drop_duplicates())
@@ -267,38 +253,3 @@ def correct_RC_BAF(RC_df, BAF_df, bins1, bins2, normal_cells=[]):
     BAF_df_filt = BAF_df_filt.rename(columns=dict(zip(BAF_df_filt.columns, range(len(shared)))))
 
     return RC_df_filt, BAF_df_filt, shared, cell_names
-
-def check_prep_readcount(args):
-    if args['reference'] is None:
-        print('Must provide a reference.')
-        return -1
-    if not os.path.exists(args['reference']):
-        print('Cannot find reference file')
-        return -1
-    if args['bin_size'] is None:
-        print('Bin size required')
-        return -1
-    if not os.path.exists(args['map_file']):
-        print('Must provide bigWig mappability file.')
-        return -1
-    if not os.path.isdir(args['bam_path']):
-        print('Must specify path to directory containing bam files.')
-        return -1
-    return 0
-
-def check_prep_baf(args):
-    if not os.path.isdir(args['bam_path']):
-        print('Must specify path to directory containing bam files.')
-        return -1
-    if args['precomputed_baf']:
-        if not os.path.exists(args['precomputed_baf']):
-            print('Cannot find input baf file.')
-            return -1
-    elif args['vcf']:
-        if not os.path.exists(args['vcf']):
-            print('Cannot find input vcf file.')
-            return -1
-    else:
-        print('Must provide input vcf with phased snps or precomputed BAFs.')
-        return -1
-    return 0
