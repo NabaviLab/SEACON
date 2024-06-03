@@ -142,7 +142,7 @@ def convert_baf(out_dir, temp_chis_dir, cell_names, bin_coords):
     df = df.pivot(index='cell', columns='id', values='BAF')
     order = [f'{x[0]}-{x[1]}' for x in bin_coords]
     df = df[order]
-    df = df.rename(columns = {i: x for i,x in enumerate(order)})
+    df = df.rename(columns = {x: i for i,x in enumerate(order)})
     df = df.reindex(cell_names)
     df = df.round(5)
     df.to_csv(os.path.join(out_dir, 'BAF.tsv'), sep='\t')
