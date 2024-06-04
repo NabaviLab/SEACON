@@ -108,6 +108,7 @@ dependencies:
   - pyvcf=0.6.8=py310hff52083_1003
   - pyvcf3=1.0.3=pyhdfd78af_0
   - r-base=4.2.2=ha7d60f8_3
+  - r-biocmanager=1.30.23=r42hc72bb7e_0
   - readline=8.2=h8228510_1
   - rpy2=3.5.11=py310r42h1f7b6fc_3
   - scikit-learn=1.5.0=py310h981052a_1
