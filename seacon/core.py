@@ -7,6 +7,7 @@ import pathlib
 import argparse
 import datetime
 import pickle
+import logging
 
 import seacon.reader as reader
 import seacon.normalizer as norm
@@ -29,6 +30,7 @@ def parse_args():
     parser.add_argument('--bedtools', type=str, default='bedtools', help='Path to bedtools executable. Default: in user $PATH.')
     parser.add_argument('--bigwig', type=str, default='bigWigAverageOverBed', help='Path to bigWigAverageOverBed executable. Default: in user $PATH.')
     parser.add_argument('--map-file', type=str, default='assets/hg38_mappability.bigWig', help='Path to mappability file in bigwig format. By default, set to assets/hg38_mappability.bigWig.')
+    parser.add_argument('--region-path', type=str, default=None, help='Path to input regions to use.')
     parser.add_argument('--precomputed-baf', type=str, default=None, help='Path to file containing precomputed BAFs. See instructions for file format.')
     parser.add_argument('--vcf', type=str, default=None, help='Path to input vcf file containing phased SNPs.')
     parser.add_argument('--block-size', type=int, default=100, help='Size of haplotype blocks in kb (default 100).')
@@ -82,24 +84,32 @@ def save_args(args):
             f.write('\n')
 
 def prep_readcount(args):
+    logging.info('Initializing regions')
     chrom_names = reader.get_chrom_names(args['chrom_names'])
     chrom_lens = reader.get_chrom_lens(args['reference'], chrom_names)
     regions = reader.get_bins_from_chromlens(chrom_lens, args['bin_size'])
     full_region_path = reader.write_region_file(args['out_dir'], 'full_regions.bed', regions)
 
+    logging.info('Getting GC and Mappability')
     gc = reader.get_gc(args['reference'], full_region_path, args['bedtools'])
     mapp = reader.get_mapp(args['out_dir'], full_region_path, args['bigwig'], args['map_file'])
+    if args['region_path']:
+        filtered_regions = reader.read_region_file(args['region_path'])
+        reader.write_region_file(args['out_dir'], 'filtered_regions.bed', filtered_regions)
+    else:
+        filtered_regions, filtered_stats = reader.filter_bins_gc_mapp(regions, gc, mapp)
+        reader.write_region_file(args['out_dir'], 'filtered_regions.bed', filtered_regions, stats=filtered_stats)
 
-    filtered_regions, filtered_stats = reader.filter_bins_gc_mapp(regions, gc, mapp)
-    reader.write_region_file(args['out_dir'], 'filtered_regions.bed', filtered_regions, stats=filtered_stats)
     bin_coords = index_bins(os.path.join(args['out_dir'], 'filtered_regions.bed'))
 
+    logging.info('Counting reads')
     raw_readcounts_df, cell_names = reader.get_readcounts_bamdir(args['bam_path'], filtered_regions, num_processors=args['num_processors'])
     print('Number of cells:', len(cell_names))
 
     raw_readcounts_df.to_csv(os.path.join(args['out_dir'], 'raw_readcounts.tsv'), sep='\t')  
     reader.write_cell_names(os.path.join(args['out_dir'], 'cells.txt'), cell_names)
 
+    logging.info('Normalizing readcounts')
     if args['no_normal']:
         gc, mapp = reader.read_stats(filtered_regions)
         readcounts_df = norm.map_correct(raw_readcounts_df, mapp)
@@ -136,6 +146,7 @@ def prep_baf(args):
     bin_coords = index_bins(os.path.join(args['out_dir'], 'filtered_regions.bed'))
     readcounts_df = reader.read_data_flat(os.path.join(args['out_dir'], 'readcounts.tsv'))
     if args['precomputed_baf']:
+        logging.info('Loading precomputed BAFs')
         BAF_df, alt_bin_coords = reader.collect_other_BAF(args['precomputed_baf'], cell_names)
         readcounts_df, BAF_df, shared_bins, shared_cells = correct_RC_BAF(readcounts_df, BAF_df, bin_coords, alt_bin_coords)
         BAF_df = BAF_df.round(5)
@@ -255,20 +266,26 @@ def call(args):
     df.to_csv(os.path.join(args['out_dir'], f'calls.tsv'), sep='\t', index=False)
 
 def main():
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+
     args = parse_args()
     save_args(args)
     if args['mode'] == 'prep_readcount' or args['mode'] == 'full':
+        logging.info('Running SEACON in mode prep_readcount')
         if check_prep_readcount(args) == 0:
             prep_readcount(args)
 
     if args['mode'] == 'pseudonormal':
+        logging.info('Running SEACON in mode pseudonormal')
         pseudonormal(args)
 
     if args['mode'] == 'prep_baf' or args['mode'] == 'full':
+        logging.info('Running SEACON in mode prep_baf')
         if check_prep_baf(args) == 0:
             prep_baf(args)
 
     if args['mode'] == 'call' or args['mode'] == 'full':
+        logging.info('Running SEACON in mode call')
         call(args)
 
 if __name__ == '__main__':

@@ -48,7 +48,8 @@ def normcell_correct(readcount_df, normal_cells):
     for b in range(len(readcount_df.columns)):
         norm_bin_vals = norm_rc[b] / norm_means
         bin_lambda = np.mean(norm_bin_vals)
-        readcount_df[b] = readcount_df[b] / bin_lambda
+        if bin_lambda > 0:
+            readcount_df[b] = readcount_df[b] / bin_lambda
     return readcount_df
 
 def bulknorm_correct(readcount_df, norm_counts):
