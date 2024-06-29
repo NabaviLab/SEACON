@@ -8,6 +8,7 @@ import pandas as pd
 import pysam
 import vcf
 import pickle
+import logging
 
 import seacon.reader as reader
 from seacon.helpers import index_bins
@@ -41,6 +42,7 @@ def gen_rdr_inp(cell_names, cell_map, bin_coords, norm_counts, readcounts, RDR, 
                 f.write(f'{chrom}\t{start}\t{end}\t{cell_map[cell]}\t{norm_counts[i]}\t{readcounts.loc[cell][i]}\t{RDR.loc[cell][i]}\n')
 
 def get_phased_counts_cell(cell, chrom_names, vcf_path, bam_dir, temp_chis_dir):
+    logging.info(f'Collecting phased counts for cell {cell}')
     bam_path = os.path.join(bam_dir, f'{cell}.bam')
     bamfile = pysam.AlignmentFile(bam_path, "rb")
     vcf_reader = vcf.Reader(filename=vcf_path)

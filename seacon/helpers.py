@@ -86,10 +86,9 @@ def save_flat_data(df, outdir, name, bin_ids = None):
     else:
         df.to_csv(os.path.join(outdir, name), sep='\t')
     
-def combine_flat_data(read_counts_df, baf_df):
+def combine_flat_data(read_counts_df, baf_df, cell_names):
     binID_to_cell = {}
     cell_bin_to_binID = {}
-    cell_names = list(read_counts_df.index.get_level_values(0).drop_duplicates())
     num_bins = len(read_counts_df.columns)
     r = read_counts_df.to_numpy().flatten()
     b = baf_df.to_numpy().flatten()

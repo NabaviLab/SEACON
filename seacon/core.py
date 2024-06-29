@@ -46,11 +46,12 @@ def parse_args():
     parser.add_argument('--min-component', type=int, default=8, help='Minimum number of GMM components to consider.')
     parser.add_argument('--max-component', type=int, default=25, help='Maximum number of GMM components to consider.')
     parser.add_argument('--max-iter', type=int, default=1000, help='Max number of GMM iterations.')
-    parser.add_argument('--tolerance', type=float, default=0.2, help='Tolerance for combining GMM components.')
+    parser.add_argument('--tolerance', type=float, default=0.1, help='Tolerance for combining GMM components.')
     parser.add_argument('--upper-filter', type=int, default=5, help='Upper bound for breakpoint filter.')
-    parser.add_argument('--max-wgd', type=int, default=2, help='Maximum number of WGDs to consider.')
+    parser.add_argument('--max-wgd', type=int, default=1, help='Maximum number of WGDs to consider.')
     parser.add_argument('--max-CN', type=int, default=10, help='Maximum CN to consider.')
     parser.add_argument('--ploidy-RDR', action='store_true', help='Select ploidy from RDR instead of combined RDR/BAF. Use if BAF estimates are highly noisy.')
+    parser.add_argument('--ploidy-method', type=str, default='weighted', help='Method to compute ploidy. Options are \'weighted\', \'unweighted\', and \'noBAF\'. Defaults to weighted.')
     parser.add_argument('--num-permutation', type=int, default=1000, help='Number of permutations in CBS algorithm.')
     parser.add_argument('--alpha', type=float, default=0.05, help='Alpha value for CBS algorithm.')
     parser.add_argument('--min-width', type=int, default=3, help='Minimum width for CBS algorithm.')
@@ -84,13 +85,13 @@ def save_args(args):
             f.write('\n')
 
 def prep_readcount(args):
-    logging.info('Initializing regions')
+    logging.info(f'{datetime.datetime.now()} | Initializing regions')
     chrom_names = reader.get_chrom_names(args['chrom_names'])
     chrom_lens = reader.get_chrom_lens(args['reference'], chrom_names)
     regions = reader.get_bins_from_chromlens(chrom_lens, args['bin_size'])
     full_region_path = reader.write_region_file(args['out_dir'], 'full_regions.bed', regions)
 
-    logging.info('Getting GC and Mappability')
+    logging.info(f'{datetime.datetime.now()} | Getting GC and Mappability')
     gc = reader.get_gc(args['reference'], full_region_path, args['bedtools'])
     mapp = reader.get_mapp(args['out_dir'], full_region_path, args['bigwig'], args['map_file'])
     if args['region_path']:
@@ -102,14 +103,14 @@ def prep_readcount(args):
 
     bin_coords = index_bins(os.path.join(args['out_dir'], 'filtered_regions.bed'))
 
-    logging.info('Counting reads')
+    logging.info(f'{datetime.datetime.now()} | Counting reads')
     raw_readcounts_df, cell_names = reader.get_readcounts_bamdir(args['bam_path'], filtered_regions, num_processors=args['num_processors'])
     print('Number of cells:', len(cell_names))
 
     raw_readcounts_df.to_csv(os.path.join(args['out_dir'], 'raw_readcounts.tsv'), sep='\t')  
     reader.write_cell_names(os.path.join(args['out_dir'], 'cells.txt'), cell_names)
 
-    logging.info('Normalizing readcounts')
+    logging.info(f'{datetime.datetime.now()} | Normalizing readcounts')
     if args['no_normal']:
         gc, mapp = reader.read_stats(filtered_regions)
         readcounts_df = norm.map_correct(raw_readcounts_df, mapp)
@@ -146,7 +147,7 @@ def prep_baf(args):
     bin_coords = index_bins(os.path.join(args['out_dir'], 'filtered_regions.bed'))
     readcounts_df = reader.read_data_flat(os.path.join(args['out_dir'], 'readcounts.tsv'))
     if args['precomputed_baf']:
-        logging.info('Loading precomputed BAFs')
+        logging.info(f'{datetime.datetime.now()} | Loading precomputed BAFs')
         BAF_df, alt_bin_coords = reader.collect_other_BAF(args['precomputed_baf'], cell_names)
         readcounts_df, BAF_df, shared_bins, shared_cells = correct_RC_BAF(readcounts_df, BAF_df, bin_coords, alt_bin_coords)
         BAF_df = BAF_df.round(5)
@@ -181,8 +182,11 @@ def prep_baf(args):
                 print('Cannot find chisel submodule.')
                 return
 
+        logging.info(f'{datetime.datetime.now()} | Collecting phased counts at SNP positions')
         chisel_baf_helper(cell_names, chrom_names, bin_coords, norm_counts, readcounts_df, RDR_df, args['bam_path'], args['vcf'], args['out_dir'], temp_chis_dir, args['num_processors'])
+        logging.info(f'{datetime.datetime.now()} | Calling CHISEL BAF estimation subroutine')
         call_chisel_combo(chisel_src, temp_chis_dir, args['block_size'], args['num_processors'])
+        logging.info(f'{datetime.datetime.now()} | Generating CHISEL calls for comparison')
         call_chisel_caller(chisel_src, temp_chis_dir, args['max_CN'], args['num_processors'])
         convert_baf(args['out_dir'], temp_chis_dir, cell_names, bin_coords)
 
@@ -190,6 +194,11 @@ def call(args):
     cell_names = reader.read_cell_names(os.path.join(args['out_dir'], 'cells.txt'))
     bin_coords = index_bins(os.path.join(args['out_dir'], 'filtered_regions.bed'))
     readcounts_df = reader.read_data_flat(os.path.join(args['out_dir'], 'readcounts.tsv'))
+
+    if os.path.exists(os.path.join(args['out_dir'], 'diploid.txt')):
+        normal_cells = reader.read_cell_names(os.path.join(args['out_dir'], 'diploid.txt'))
+    else:
+        normal_cells = []
 
     if os.path.exists(os.path.join(args['out_dir'], 'RDR.tsv')) and os.path.exists(os.path.join(args['out_dir'], 'BAF.tsv')):
         RDR_df = reader.read_data_flat(os.path.join(args['out_dir'], 'RDR.tsv'))
@@ -199,7 +208,7 @@ def call(args):
         return
 
     chrom_names = list(set([x[0] for x in bin_coords]))
-    flat_data, binID_to_cell, cell_bin_to_binID = combine_flat_data(RDR_df, BAF_df)
+    flat_data, binID_to_cell, cell_bin_to_binID = combine_flat_data(RDR_df, BAF_df, cell_names)
     num_bin_per_chrom = get_bins_per_chrom(bin_coords)
 
     seg_params = {}
@@ -228,26 +237,83 @@ def call(args):
     }
 
     seg_obj = segmentation(seg_params, gmm_params=gmm_params, cbs_params=cbs_params)
-    print('Best k: ', seg_obj['best_K'], len(seg_obj['means']))
-    #with open(os.path.join(args['out_dir'], 'seg_obj.pkl'), 'wb') as f:
-    #    pickle.dump(seg_obj, f)
-
-    #with open(os.path.join(args['out_dir'], 'seg_obj.pkl'), 'rb') as f:
-    #    seg_obj = pickle.load(f)
+    #print('Best k: ', seg_obj['best_K'], len(seg_obj['means']))
+    with open(os.path.join(args['out_dir'], 'seg_obj.pkl'), 'wb') as f:
+        pickle.dump(seg_obj, f)
 
     ensemble_bkpts = seg_obj['bkpts']
-    cell_names = list(ensemble_bkpts.keys())
     clust = seg_obj['clust']
     means = seg_obj['means']
     covs = seg_obj['covs']
     weights = seg_obj['weights']
 
+    logging.info(f'{datetime.datetime.now()} | Finalizing segment componenets')
     new_clust = get_segs(cell_names, clust, ensemble_bkpts, RDR_df, BAF_df, means, num_bin_per_chrom, args['min_seg_length'])
-    best_CNs, chosen = get_cluster_CNs(cell_names, new_clust, RDR_df, BAF_df, means, covs, args['max_wgd'], args['max_CN'], args['ploidy_RDR'])
+    logging.info(f'{datetime.datetime.now()} | Selecting component CNs')
+    best_CNs, chosen = get_cluster_CNs(cell_names, normal_cells, new_clust, RDR_df, BAF_df, means, covs, weights, args['max_wgd'], args['max_CN'], args['ploidy_method'])
 
+    logging.info(f'{datetime.datetime.now()} | Calling allele copy numbers')
     bin_coords = [bin_coords[i] + (i,) for i in range(len(bin_coords))]
     allele_CNs = allele_caller(cell_names, best_CNs, new_clust)
 
+    logging.info(f'{datetime.datetime.now()} | Saving CNA profiles')
+    flat_df = {}
+    n_bins = len(bin_coords)
+    for cell in cell_names:
+        cell_CNs = allele_CNs[cell]
+        flat_df[cell] = [f'{cell_CNs[i][0]},{cell_CNs[i][1]}' for i in range(n_bins)]
+    flat_df = pd.DataFrame.from_dict(flat_df, orient='index')
+    flat_df.index.name = 'cell'
+    flat_df.to_csv(os.path.join(args['out_dir'], f'calls_flat.tsv'), sep='\t')
+
+    frames = []
+    for cell in cell_names:
+        cell_CNs = allele_CNs[cell]
+        cell_frames = [[cell, x[0], x[1], x[2], f'{cell_CNs[x[3]][0]},{cell_CNs[x[3]][1]}'] for x in bin_coords]
+        frames.append(pd.DataFrame(cell_frames, columns=['cell', 'chrom', 'start', 'end', 'CN']))
+    df = pd.concat(frames)
+    df.to_csv(os.path.join(args['out_dir'], f'calls.tsv'), sep='\t', index=False)
+
+def infer(args):
+    cell_names = reader.read_cell_names(os.path.join(args['out_dir'], 'cells.txt'))
+    bin_coords = index_bins(os.path.join(args['out_dir'], 'filtered_regions.bed'))
+    readcounts_df = reader.read_data_flat(os.path.join(args['out_dir'], 'readcounts.tsv'))
+
+    if os.path.exists(os.path.join(args['out_dir'], 'diploid.txt')):
+        normal_cells = reader.read_cell_names(os.path.join(args['out_dir'], 'diploid.txt'))
+    else:
+        normal_cells = []
+
+    if os.path.exists(os.path.join(args['out_dir'], 'RDR.tsv')) and os.path.exists(os.path.join(args['out_dir'], 'BAF.tsv')):
+        RDR_df = reader.read_data_flat(os.path.join(args['out_dir'], 'RDR.tsv'))
+        BAF_df = reader.read_data_flat(os.path.join(args['out_dir'], 'BAF.tsv'))
+    else:
+        print('RDRs and BAFs not found. Make sure the previous steps are run.')
+        return
+
+    chrom_names = list(set([x[0] for x in bin_coords]))
+    flat_data, binID_to_cell, cell_bin_to_binID = combine_flat_data(RDR_df, BAF_df, cell_names)
+    num_bin_per_chrom = get_bins_per_chrom(bin_coords)
+
+    with open(os.path.join(args['out_dir'], 'seg_obj.pkl'), 'rb') as f:
+        seg_obj = pickle.load(f)
+
+    ensemble_bkpts = seg_obj['bkpts']
+    clust = seg_obj['clust']
+    means = seg_obj['means']
+    covs = seg_obj['covs']
+    weights = seg_obj['weights']
+
+    logging.info(f'{datetime.datetime.now()} | Finalizing segment componenets')
+    new_clust = get_segs(cell_names, clust, ensemble_bkpts, RDR_df, BAF_df, means, num_bin_per_chrom, args['min_seg_length'])
+    logging.info(f'{datetime.datetime.now()} | Selecting component CNs')
+    best_CNs, chosen = get_cluster_CNs(cell_names, normal_cells, new_clust, RDR_df, BAF_df, means, covs, weights, args['max_wgd'], args['max_CN'], args['ploidy_method'])
+
+    logging.info(f'{datetime.datetime.now()} | Calling allele copy numbers')
+    bin_coords = [bin_coords[i] + (i,) for i in range(len(bin_coords))]
+    allele_CNs = allele_caller(cell_names, best_CNs, new_clust)
+
+    logging.info(f'{datetime.datetime.now()} | Saving CNA profiles')
     flat_df = {}
     n_bins = len(bin_coords)
     for cell in cell_names:
@@ -267,26 +333,34 @@ def call(args):
 
 def main():
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    s_time = datetime.datetime.now()
 
     args = parse_args()
     save_args(args)
     if args['mode'] == 'prep_readcount' or args['mode'] == 'full':
-        logging.info('Running SEACON in mode prep_readcount')
+        logging.info(f'{datetime.datetime.now()} | Running SEACON in mode prep_readcount')
         if check_prep_readcount(args) == 0:
             prep_readcount(args)
 
     if args['mode'] == 'pseudonormal':
-        logging.info('Running SEACON in mode pseudonormal')
+        logging.info(f'{datetime.datetime.now()} | Running SEACON in mode pseudonormal')
         pseudonormal(args)
 
     if args['mode'] == 'prep_baf' or args['mode'] == 'full':
-        logging.info('Running SEACON in mode prep_baf')
+        logging.info(f'{datetime.datetime.now()} | Running SEACON in mode prep_baf')
         if check_prep_baf(args) == 0:
             prep_baf(args)
 
     if args['mode'] == 'call' or args['mode'] == 'full':
-        logging.info('Running SEACON in mode call')
+        logging.info(f'{datetime.datetime.now()} | Running SEACON in mode call')
         call(args)
+    
+    if args['mode'] == 'infer':
+        infer(args)
+    
+    e_time = datetime.datetime.now()
+    elapsed = round((e_time - s_time).total_seconds(), 3)
+    logging.info(f'Elapsed time: {elapsed}s')
 
 if __name__ == '__main__':
     main()

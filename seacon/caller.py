@@ -9,6 +9,7 @@ def euc(a, b):
     return d
 
 # cell-specific
+'''
 def gen_candidates(clust, means, weights, max_wgd, RDR):
     # Filters out small components with weight < 0.1 and RDR < 0.25.
     m = [(i,m) for i,m in enumerate(means) if weights[i] >= 0.1 and means[i][0] > 0.25]
@@ -21,6 +22,28 @@ def gen_candidates(clust, means, weights, max_wgd, RDR):
     candidates = [(2**(i+1))/avg_RDR for i in range(max_wgd + 1)]
     
     return candidates, S
+'''
+
+def gen_candidates(clust, means, weights, max_wgd, RDR):
+    cur_weights = np.bincount(clust) / len(clust)
+    while len(cur_weights) != len(means):
+        cur_weights = np.append(cur_weights, 0)
+    
+    best_choices = []
+    lbaf = 0.5
+    while len(best_choices) == 0 and lbaf > 0.25:
+        lbaf -= 0.05
+        best_choices = [(i,m) for i,m in enumerate(means) if cur_weights[i] > 0 and m[0] >= 0.5 and m[0] <= 1.5 and m[1] >= lbaf]
+    if len(best_choices) == 0:
+        i = np.argmax(cur_weights)
+        best_choices.append((i, means[i]))
+    
+    best_choices.sort(key = lambda x: weights[x[0]], reverse = True)
+    S = best_choices[0][0]
+    avg_RDR = sum([RDR[i] for i in range(len(clust)) if clust[i] == S]) / np.count_nonzero(clust == S)#clust.count(S)
+    candidates = [(2**(i+1))/avg_RDR for i in range(max_wgd + 1)]
+    
+    return candidates, S
 
 def estimate_ploidy_RC(RDR, states):
     X = RDR.to_numpy()
@@ -28,10 +51,10 @@ def estimate_ploidy_RC(RDR, states):
     candidates = []
     for s in states:
         est = []
-        c = s - 0.1
-        while c <= s + 0.1:
+        c = s - 0.2
+        while c <= s + 0.2:
             est.append(np.sum(np.square(X*c - np.round(X*c))))
-            c += 0.01
+            c += 0.05
         val = min(est)
         candidates.append(val)
     return candidates
@@ -89,19 +112,17 @@ def compute_likelihood(clust, RDR, BAF, scale, n_wgd, S, pairs, covs):
 
 
 
-def get_cluster_CNs(cellnames, clust, RDR, BAF, means, covs, max_wgd, maxCN_user, ploidy_RDR):
-    cell_clust = dict(zip(cellnames, np.split(clust, len(cellnames))))
+def get_cluster_CNs(cellnames, normal_cells, clust, RDR, BAF, means, covs, weights, max_wgd, maxCN_user, ploidy_method):
     best_CNs = {}
     chosen = {}
     for cell in cellnames:
-        cur_clust, cur_RDR, cur_BAF = cell_clust[cell], RDR.xs(cell), BAF.xs(cell)
-        cur_weights = np.bincount(cur_clust) / len(cur_clust)
-        while len(cur_weights) != len(means):
-            cur_weights = np.append(cur_weights, 0)
+        cur_clust, cur_RDR, cur_BAF = clust[cell], RDR.xs(cell), BAF.xs(cell)
+        if cell in normal_cells:
+            candidates, S = gen_candidates(cur_clust, means, weights, 0, cur_RDR)
+        else:
+            candidates, S = gen_candidates(cur_clust, means, weights, max_wgd, cur_RDR)
 
-        candidates, S = gen_candidates(cur_clust, means, cur_weights, max_wgd, cur_RDR)
-
-        if ploidy_RDR:
+        if ploidy_method == 'noBAF':
             avg_RDR = sum([cur_RDR[i] for i in range(len(cur_clust)) if cur_clust[i] == S]) / np.count_nonzero(cur_clust == S)
 
             w = estimate_ploidy_RC(cur_RDR, candidates)
@@ -116,17 +137,20 @@ def get_cluster_CNs(cellnames, clust, RDR, BAF, means, covs, max_wgd, maxCN_user
 
         else:
             w = estimate_ploidy_RC(cur_RDR, candidates)
-            num_CNs, candidate_CNs, llhs, weights = [], [], [], []
+            num_CNs, candidate_CNs, llhs = [], [], []
             for n_wgd, scale in enumerate(candidates):
                 maxCN_poss = np.ceil(scale*max(cur_RDR))
-                maxCN = int(min(maxCN_poss, maxCN_user)) + 1
+                maxCN = int(min(maxCN_poss, maxCN_user))
                 pairs = gen_CN_pairs(maxCN)
                 num_CNs.append(len(pairs))
                 cur_CNs, cur_llh = compute_likelihood(cur_clust, cur_RDR, cur_BAF, scale, n_wgd, S, pairs, covs)
                 candidate_CNs.append(cur_CNs)
                 llhs.append(cur_llh)
             m = len(cur_clust)
-            best = np.argmin([w[i]*np.log(m)*num_CNs[i] - 2*llhs[i] for i in range(len(candidates))])
+            if ploidy_method == 'weighted':
+                best = np.argmin([w[i]*np.log(m)*num_CNs[i] - 2*llhs[i] for i in range(len(candidates))])
+            else:
+                best = np.argmin([np.log(m)*num_CNs[i] - 2*llhs[i] for i in range(len(candidates))])
             chosen[cell] = best
             best_CNs[cell] = candidate_CNs[best]
             
@@ -134,10 +158,9 @@ def get_cluster_CNs(cellnames, clust, RDR, BAF, means, covs, max_wgd, maxCN_user
 
 
 def allele_caller(cell_names, best_CNs, clust):
-    cell_clust = dict(zip(cell_names, np.split(clust, len(cell_names))))
     allele_CNs = {}
     for cell in cell_names:
-        allele_CNs[cell] = [best_CNs[cell][i] for i in cell_clust[cell]]
+        allele_CNs[cell] = [best_CNs[cell][i] for i in clust[cell]]
     return allele_CNs
 
 def get_segs(cell_names, clust, ensemble_bkpts, RDR, BAF, means, num_bin_per_chrom, min_seg_length):
@@ -227,8 +250,6 @@ def get_segs(cell_names, clust, ensemble_bkpts, RDR, BAF, means, num_bin_per_chr
             seg = ensemble_segments[cell][i]
             cell_assignments[cell].extend([k for j in range(len(seg))])
     
-    new_clusts = []
-    for cell in cell_names:
-        new_clusts.extend(cell_assignments[cell])
+    new_clusts = {cell: np.array(cell_assignments[cell]) for cell in cell_names}
 
-    return np.array(new_clusts)
+    return new_clusts

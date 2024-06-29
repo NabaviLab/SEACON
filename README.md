@@ -21,9 +21,11 @@ Under Review.
     - [CNA calling](#call-mode)
     - [Constructing pseudonormal](#pseudonormal-mode)
     - [Output files](#output-files)
+    - [Resource requirements](#resource-requirements-and-runtime)
 - [Utilities](#utilities)
     - [Raw Data Preprocessing](#raw-data-preprocessing)
     - [Obtaining Phased SNPs](#obtaining-phased-snps)
+    - [Breakpoint Filtering Scripts](#breakpoint-filtering-scripts)
     - [Example commands](#example-commands)
 - [Simulations](#simulations)
 
@@ -41,15 +43,16 @@ To reproduce the environment needed to use SEACON, with all its dependencies and
 conda env create -f environment.yml
 ```
 
-This will create a new conda environment named SEACON. Next, execute the installation:
+This will create a new conda environment named SEACON. Next, activate the environment:
+```
+conda activate SEACON
+```
+
+Lastly, execute the installation of the tool:
 ```
 pip install .
 ```
 
-Lastly, be sure to activate the environment before using the tool:
-```
-conda activate SEACON
-```
 
 ### Custom Installation
 The environment can also be assembled manually. SEACON reliably works for Python version 3.10 and R version 4.1. Additionally, there are a number of python dependencies, one R package, and a few standard bioinformatics tools. All are available on conda, and are listed below.
@@ -64,9 +67,6 @@ SEACON requires the following python packages are installed:
 * [Pysam](https://pysam.readthedocs.io/en/latest/api.html)
 * [Pyfaidx](https://github.com/mdshw5/pyfaidx)
 * [PyVCF](https://pyvcf.readthedocs.io/en/latest/)
-
-The following R packages are also required:
-* [dnacopy](https://bioconductor.org/packages/release/bioc/html/DNAcopy.html)
 
 Additionally, SEACON requires the following bioinformatics tools be available:
 * [bedtools](https://bedtools.readthedocs.io/en/latest/)
@@ -131,7 +131,7 @@ seacon pseudonormal -i bam_dir -o out_dir
 ```
 After this file is generated, use the provided `gen_vcf.sh` script in the *scripts* directory to identify the phased SNPs (see the section [Obtaining phased SNPs](#obtaining-phased-snps)). When this is complete, continue by running SEACON with the *prep_baf* mode.
 
-### output files
+### Output files
 After running the full SEACON pipeline, the final allele-specific copy number profiles are saved in the *calls.tsv* file, which has the following format:
 
 cell &nbsp; chrom &nbsp; start &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; end &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; CN <br>
@@ -144,6 +144,11 @@ The copy number profiles are also saved more compactly in the *calls_flat.tsv* f
 The readcounts, RDRs, and BAFs are saved in files *readcounts.tsv*, *RDR.tsv*, and *BAF.tsv*, respectively, also in compact format. Additionally, the set of normal cells identified in the sample are saved in the *diploid.txt* file.
 
 If the BAF estimation procedure of CHISEL is used, the output of chisel can be found in file *chisel_out/calls/calls.tsv*. Please see the CHISEL documentation for more details.
+
+### Resource requirements and runtime
+The runtime of SEACON greatly depends on the number of cells and coverage. We advise using SEACON on a high performance computing cluster with multiple cores. Below is a table containing the runtimes of the three main modes of SEACON on two whole-genome datasets, one with 100 cells and the other 1000. Both datasets have a coverage of 0.1X. The commands were executed 
+
+
 
 ## Utilities
 
@@ -160,6 +165,9 @@ samtools index cell.sorted.bam
 If a matched-normal sample is available, or if a pseudonormal sample is constructed using the *pseudonormal* mode of SEACON, it is necessary to obtain a set of phased SNPs to compute the BAFs. A pipeline for obtaining a vcf file with phased SNPs is provided in the script `gen_vcf.sh` located in the *scripts* directory. This script requires *bcftools* and additionally a phasing tool such as *Eagle2* or *shapeit*.
 
 In the provided script `gen_vcf.sh`, the tool Eagle2 is used, and a prebuilt binary for linux can be installed [here](https://alkesgroup.broadinstitute.org/Eagle/). Using reference-based phasing locally requires a reference panel to be downloaded, for example [this reference](https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000G_2504_high_coverage/working/20201028_3202_phased/) from 1000 Genomes. Reference-free phasing is also possible. Additionally, Eagle2 can be used online through the the [Michigan Imputation Server](https://imputationserver.sph.umich.edu/index.html#!).
+
+### Breakpoint filtering scripts
+We have provided scripts to smooth the output copy number profiles of any method using the breakpoint filtering heuristic implemented in SEACON. These scripts are located in the *scripts* directory and include one for the output of CHISEl and another for any arbitrary output. Instructions on using these scripts appear in the README file located in the scripts directory.
 
 ### Example commands
 The following is an example workflow of using SEACON

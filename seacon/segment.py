@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
+import logging
+import datetime
 
 from seacon.local import local_segmentation_generator
     
@@ -92,7 +94,7 @@ def get_best_pair(means, t):
 def get_gmm_model(f, min_component, max_component, init_params='kmeans', max_iter=500, n_init=1):
     models = {}
     for i in range(min_component, max_component+1):
-        print(f'components={i}')
+        logging.info(f'{datetime.datetime.now()} | Fitting Gaussin Mixture: {i} components')
         gmm = GaussianMixture(n_components=i, init_params=init_params, max_iter=max_iter, n_init=n_init, covariance_type='full').fit(f)
         models[i] = gmm
     
@@ -135,7 +137,6 @@ def merge_relative(f, gmm, t):
         if distances[p[0]][p[1]] <= thresh:
             pairs.append(p)
     
-    print(f'Num merges: {num_merges}')
     return clust, means, covs, weights
 
 def merge_static(f, gmm, t):
@@ -167,7 +168,6 @@ def merge_static(f, gmm, t):
         
         best_p = get_best_pair(means, t)
     
-    print(f'Num merges: {len(merges)}')
     return clust, means, covs, weights, merges
 
 def global_seg(flat_data, min_component, max_component, tol, gmm_params):
@@ -175,7 +175,6 @@ def global_seg(flat_data, min_component, max_component, tol, gmm_params):
 
     models, best_K, best_bic = get_gmm_model(f, min_component, max_component, **gmm_params)
     best_model = models[best_K]
-    print('best', best_K)
     means, covs, weights = best_model.means_, best_model.covariances_, best_model.weights_
     clust, means, covs, weights, merges = merge_static(f, best_model, t=tol)
 
@@ -246,6 +245,7 @@ def segmentation(args, gmm_params={}, cbs_params={}):
     local_bkpts, lower_bkpts, upper_bkpts, ensemble_bkpts = None, None, None, None
     nbins = int(len(flat_data)/len(cell_names))
 
+    logging.info(f'{datetime.datetime.now()} | Generating local breakpoints')
     if seg_type == 'local' or seg_type == 'ensemble':
         local_filepath = os.path.join(out_dir, 'local_bkpts.tsv')
         readcount_filepath = os.path.join(out_dir, 'readcounts.tsv')
@@ -255,9 +255,10 @@ def segmentation(args, gmm_params={}, cbs_params={}):
         if seg_type == 'local':
             return {'clust': None, 'means': None, 'covs': None, 'weights': None, 'best_K': None, 'bkpts': local_bkpts, 'assignments': None}
     
+    logging.info(f'{datetime.datetime.now()} | Running global clustering with GMM')
     clust, means, covs, weights, best_K, merges = global_seg(flat_data, min_component, max_component, tol, gmm_params)
-
-    cell_clust = dict(zip(cell_names, np.split(clust, len(cell_names))))
+    logging.info(f'{datetime.datetime.now()} | Best: {best_K} ')
+    logging.info(f'{datetime.datetime.now()} | Merges: {len(merges)} ')
 
     lower_bkpts = get_bkpts(cell_names, binID_to_cell, clust, nbins)
 
