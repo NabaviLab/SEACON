@@ -146,9 +146,12 @@ The readcounts, RDRs, and BAFs are saved in files *readcounts.tsv*, *RDR.tsv*, a
 If the BAF estimation procedure of CHISEL is used, the output of chisel can be found in file *chisel_out/calls/calls.tsv*. Please see the CHISEL documentation for more details.
 
 ### Resource requirements and runtime
-The runtime of SEACON greatly depends on the number of cells and coverage. We advise using SEACON on a high performance computing cluster with multiple cores. Below is a table containing the runtimes of the three main modes of SEACON on two whole-genome datasets, one with 100 cells and the other 1000. Both datasets have a coverage of 0.1X. The commands were executed 
+The runtime and memory requirements of SEACON greatly depends on the number of cells, coverage, and other factors. Resource usage and runtime will mostly consist of the raw data preprocessing and BAF computation, with the `seacon call` command executing relatively quickly. For this reason, we advise using SEACON on a high performance computing cluster with multiple cores. For convenience, we show example execution times of the three main modes of SEACON two whole-genome scDNA-seq datasets, one with 100 cells and the other 1000. Both datasets have a coverage of 0.1X coverage and 1Mbp bin sizes. The commands were allocated 10 cores of an Intel Xeon E5 v4 2.4GHz processors. The 100 cell dataset was allocated 20Gb memory, while the 1000 cell data was as allocated 40Gb. Note that the memory requirements are largely to run the CHISEL BAF estimation procedure - if using precomputed BAFs, the call command can be run with significantly less memory.
 
-
+| Num cell | Coverage | Bin Size | prep_readcount | prep_baf | call |
+|----------|----------|----------|----------------|----------|------|
+| 100      | 0.1X     | 1Mbp     | 128s           | 6404s    | 496s |
+| 1000     | 0.1X     | 1Mbp     | 926s           | 25.6h    | 12004s    |
 
 ## Utilities
 
