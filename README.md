@@ -1,5 +1,5 @@
 # SEACON
-SEACON (Single-cell Estimation of Allele-specific COpy Numbers) is a tool for allele-specific copy number profiling from single-cell DNA-sequencing data.
+SEACON (Single-cell Estimation of Allele-specific COpy Numbers) is a tool for allele-specific copy number profiling from single-cell DNA-sequencing data. The source code is also available from [Zenodo](https://doi.org/10.5281/zenodo.12727008).
 
 SEACON can be cited as follows:
 "Improved allele-specific single-cell copy number estimation in low-coverage DNA-sequencing".
