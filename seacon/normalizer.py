@@ -56,7 +56,7 @@ def bulknorm_correct(readcount_df, norm_counts):
     norm_mean = np.mean(norm_counts)
     bin_lambdas = norm_counts / norm_mean
     for b in range(len(readcount_df.columns)):
-        readcount_df[b] = readcount_df[b] / y[b]
+        readcount_df[b] = readcount_df[b] / bin_lambdas[b]
     return readcount_df
 
 # Given array of read counts, computes gini coefficient
